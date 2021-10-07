@@ -4,6 +4,20 @@ var fs = require('fs');
 const request = require('request')
 const uuid = require('uuid')
 
+
+router.get('/info/model', function(req,res,next) {
+    const info = {
+        accents:false,
+        commit:"309c4703a92d41ca08d470955f0e253b416b151b",
+        gpu:true,
+        model:"du-ocr",
+        rotation_detection:false,
+        version:"1.0.0"
+        }
+    res.send( info);
+});
+
+
 /* POST body listing. */
 router.post('/', function(req, res, next) {
     //console.log(req.body.requests[0].image.content);
@@ -29,7 +43,8 @@ router.post('/', function(req, res, next) {
     }
 
     fs.unlink( __dirname + '/' + filename+'.png', (err) => {
-        console.log('error on file deletion ');
+        if( err)
+            console.log('error on file deletion ');
     });
 
     request.post( options, function(err, resp) {
