@@ -3,7 +3,19 @@ var router = express.Router();
 var fs = require('fs');
 const request = require('request')
 const uuid = require('uuid')
+const crypto = require('crypto');
 
+const detect_angle = function( rotation) {
+    let rot = 360 - rotation;
+    if ( rot >= 360-45 || rot < 45)
+        return 0;
+    else if ( rot >= 45 || rot < 90+45)
+        return 90;
+    else if ( rot >= 90+45 || rot < 180-45)
+        return 180;
+    else 
+        return 270;
+}
 
 router.get('/info/model', function(req,res,next) {
     const info = {
@@ -11,25 +23,29 @@ router.get('/info/model', function(req,res,next) {
         commit:"309c4703a92d41ca08d470955f0e253b416b151b",
         gpu:true,
         model:"du-ocr",
-        rotation_detection:false,
+        rotation_detection:true,
         version:"1.0.0"
         }
     res.send( info);
 });
 
 
+
 /* POST body listing. */
 router.post('/', function(req, res, next) {
-    //console.log(req.body.requests[0].image.content);
+    const synap_endpoint = process.env.SYNAP_ENDPOINT || "https://ailab.synap.co.kr/sdk/ocr";
+    const synap_boxes_type = process.env.SYNAP_BOXES_TYPE || "block";
     res.writeContinue();
-    let buff = new Buffer( req.body.requests[0].image.content, "base64");
+    var hash = crypto.createHash('md5').update( req.body.requests[0].image.content).digest('hex');  
+    //let buff = new Buffer( req.body.requests[0].image.content, "base64");
+    let buff = Buffer.from( req.body.requests[0].image.content, "base64");
     var filename = uuid.v4();
     fs.writeFileSync( __dirname + "/" + filename+".png", buff);
 
     const formdata = {
         api_key: req.headers['x-uipath-license'],
         type: 'upload',
-        boxes_type: 'block',
+        boxes_type: synap_boxes_type,
         image: fs.createReadStream( __dirname + '/'+ filename+'.png'),
         coord: 'origin',
         skew: 'image',
@@ -37,10 +53,12 @@ router.post('/', function(req, res, next) {
         textout: 'true'
     }
     const options = {
-        url: 'https://ailab.synap.co.kr/sdk/ocr',
+        url: synap_endpoint,
         method: 'POST',
         formData: formdata,
     }
+    //TO-BE-REMOVED
+    console.log( 'endpoint=' + synap_endpoint + ", type=" + synap_boxes_type);
 
     fs.unlink( __dirname + '/' + filename+'.png', (err) => {
         if( err)
@@ -48,22 +66,28 @@ router.post('/', function(req, res, next) {
     });
 
     request.post( options, function(err, resp) {
-        if( err)
+        if( err) {
             console.log(err);
-        //console.log( typeof( resp.body));
-        //console.log(resp.body);
+            return res.status(500).send("Unknow errors");
+        }
         synap = JSON.parse(resp.body);
-        //console.log( synap.result.width);
+        if( resp.statusCode == 401 || resp.statusCode == 402) 
+        {
+            return res.status(401).send("Unauthorized");
+        }
+        if( resp.statusCode != 200) {
+            return res.status(415).send("Unsupported Media Type or Not Acceptable ");
+        }
         var du_resp = {
             responses: [
                 {
-                    angle: 0,
+                    angle: detect_angle( synap.result.rotation),
                     textAnnotations: [
                         {
                             description : synap.result.full_text,
                             score: 0,
                             type: 'text',
-                            image_hash: '3a3a4f4f3a3a4f4f3a3a4f4f3a3a4f4f',
+                            image_hash: hash,
                             boundingPoly : {
                                 vertices: [
                                     {x: 0, y: 0},

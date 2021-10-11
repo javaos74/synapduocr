@@ -12,9 +12,10 @@ app.use(logger('dev'));
 app.use(express.json( {limit: "10mb"}));
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 app.use(cookieParser());
+app.set('view engine', 'pug');
 
 
-app.use('/ocr/sdk', ocrsdk);
+app.use('/', ocrsdk);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
